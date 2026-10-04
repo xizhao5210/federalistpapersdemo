@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Hamilton or Madison? Style Analyzer</title>
+<style>
+:root{--bg:#faf7f0;--fg:#2a2420;--mut:#7a6f64;--card:#fff;--bd:#e0d6c6;--h:#8c2f39;--m:#2f5d8c;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#1c1917;--fg:#ece6dc;--mut:#a39a8e;--card:#26221f;--bd:#3a342f;--h:#e07a85;--m:#7fb0e0}}
+:root[data-theme="dark"]{--bg:#1c1917;--fg:#ece6dc;--mut:#a39a8e;--card:#26221f;--bd:#3a342f;--h:#e07a85;--m:#7fb0e0}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.55 Georgia,'Times New Roman',serif}
+main{max-width:760px;margin:0 auto;padding:24px 16px 48px}
+h1{font-size:1.8rem;margin:0 0 4px}p.sub{color:var(--mut);margin:0 0 20px}
+textarea{width:100%;min-height:200px;padding:12px;border:1px solid var(--bd);border-radius:8px;background:var(--card);color:var(--fg);font:inherit;box-sizing:border-box;resize:vertical}
+.row{display:flex;gap:10px;flex-wrap:wrap;margin:12px 0}
+button{padding:10px 18px;border-radius:8px;border:1px solid var(--bd);background:var(--card);color:var(--fg);font:inherit;cursor:pointer}
+button.p{background:var(--fg);color:var(--bg);border-color:var(--fg)}
+.card{background:var(--card);border:1px solid var(--bd);border-radius:10px;padding:16px;margin-top:16px}
+.bar{display:flex;height:34px;border-radius:8px;overflow:hidden;margin:10px 0;font:600 .85rem system-ui,sans-serif;color:#fff}
+.bar div{display:flex;align-items:center;justify-content:center;transition:width .5s;min-width:0;overflow:hidden}
+#bh{background:var(--h)}#bm{background:var(--m)}
+.big{font-size:1.25rem}.h{color:var(--h)}.m{color:var(--m)}
+.tw{overflow-x:auto}table{border-collapse:collapse;width:100%;font:.9rem system-ui,sans-serif}
+th,td{padding:6px 8px;border-bottom:1px solid var(--bd);text-align:left}
+.note{color:var(--mut);font-size:.85rem}
+</style></head><body><main>
+<h1>Hamilton or Madison?</h1>
+<p class="sub">Paste any English writing and see which Federalist author's word habits it leans toward.</p>
+<textarea id="t" placeholder="Paste at least ~150 words for a meaningful reading..."></textarea>
+<div class="row"><button class="p" id="go">Analyze</button><button id="sh">Try a Hamilton-like sample</button><button id="sm">Try a Madison-like sample</button></div>
+<div id="out" hidden>
+ <div class="card"><div class="big" id="verdict"></div>
+ <div class="bar"><div id="bh"></div><div id="bm"></div></div>
+ <div class="note" id="meta"></div></div>
+ <div class="card"><b>Marker words found</b><div class="tw"><table><thead><tr><th>Word</th><th>Count</th><th>Per 1,000</th><th>Leans</th></tr></thead><tbody id="rows"></tbody></table></div></div>
+</div>
+<p class="note">Method: a Mosteller–Wallace-style function-word model. Each marker word has an approximate rate per 1,000 words in Hamilton's and Madison's Federalist essays; the page sums the log-likelihood ratio (Poisson) across markers. The rates here are rounded approximations from the classic study, not a fresh count of the full corpus, and modern prose differs from 1788 prose, so treat the result as a playful lean, not a verdict.</p>
+</main>
+<script>
+// [word, Hamilton rate per 1000, Madison rate per 1000] (approximate)
+const W=[["upon",3.2,0.2],["on",3.2,7.0],["by",7.3,11.4],["to",40.1,35.4],["would",4.6,2.0],
+["while",0.4,0.02],["whilst",0.02,0.4],["enough",0.6,0.03],["there",3.1,1.0],["also",0.2,0.9],
+["consequently",0.1,0.5],["commonly",0.5,0.03],["particularly",0.05,0.3],["vigor",0.65,0.05],["kind",0.3,0.1]];
+const S={h:"The government should be energetic. Upon the whole, there would be enough vigor in the executive to secure the safety of the people, and commonly the strongest powers are the safest.",
+m:"Whilst the several departments remain distinct, the people are consequently secured by the checks of each on the other. It is particularly necessary that the power be divided, also by the structure of the whole."};
+const $=id=>document.getElementById(id);
+function run(){
+ const txt=$("t").value.trim(), words=txt.toLowerCase().match(/[a-z']+/g)||[], N=words.length;
+ if(N<20){alert("Please enter at least 20 words (150+ is better).");return}
+ const cnt={};words.forEach(w=>cnt[w]=(cnt[w]||0)+1);
+ let llr=0;const rows=[];
+ W.forEach(([w,h,m])=>{const c=cnt[w]||0;
+  llr+=c*Math.log(h/m)-N*(h-m)/1000;
+  if(c)rows.push([w,c,(c/N*1000).toFixed(1),h>m?"Hamilton":"Madison",Math.abs(c*Math.log(h/m))]);});
+ const k=3+Math.sqrt(N/100); // dampen so short texts aren't overconfident
+ const ph=1/(1+Math.exp(-llr/k)), H=Math.round(ph*100), M=100-H;
+ $("bh").style.width=H+"%";$("bm").style.width=M+"%";
+ $("bh").textContent=H>=12?"Hamilton "+H+"%":"";$("bm").textContent=M>=12?"Madison "+M+"%":"";
+ const lead=H>=M?"Hamilton":"Madison",pct=Math.max(H,M);
+ $("verdict").innerHTML='Leans <b class="'+(H>=M?'h':'m')+'">'+lead+'</b>'+(pct<60?" (barely — close to a toss-up)":pct<80?" (moderately)":" (strongly)");
+ const sents=(txt.match(/[^.!?]+[.!?]+/g)||[txt]).length;
+ $("meta").textContent=N+" words · "+sents+" sentences · avg "+(N/sents).toFixed(1)+" words/sentence · "+rows.length+" marker words found"+(N<150?" · short text, so low confidence":"");
+ rows.sort((a,b)=>b[4]-a[4]);
+ $("rows").innerHTML=rows.length?rows.map(r=>"<tr><td>"+r[0]+"</td><td>"+r[1]+"</td><td>"+r[2]+'</td><td class="'+(r[3]=="Hamilton"?"h":"m")+'">'+r[3]+"</td></tr>").join(""):'<tr><td colspan="4">No marker words appeared; the lean comes only from their absence.</td></tr>';
+ $("out").hidden=false;
+}
+$("go").onclick=run;
+$("sh").onclick=()=>{$("t").value=S.h;run()};
+$("sm").onclick=()=>{$("t").value=S.m;run()};
+</script></body></html>
